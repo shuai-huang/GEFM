@@ -1,0 +1,33 @@
+
+Author: Shuai Huang, The Johns Hopkins University.
+Email: shuang40@jhu.edu
+Homepage: https://sites.google.com/site/shuangsite/
+
+Last change: 03/30/2017
+Change log: 
+    v1.0 (SH) - First release (03/30/2017)
+    
+
+----------------------------------------------------------------
+This package contains source code for performing sparse signal recovery via generalized entropy function minimization approach described in the following paper:
+
+@ARTICLE{GEFM17,
+   author = {{Huang}, S. and {Tran}, T.~D.},
+    title = "{Sparse Signal Recovery via Generalized Entropy Functions Minimization}",
+  journal = {ArXiv e-prints},
+archivePrefix = "arXiv",
+   eprint = {1703.10556},
+ primaryClass = "cs.IT",
+     year = 2017,
+    month = mar,
+}
+
+If you use this code and find it helpful, please cite the above paper. Thanks:)
+----------------------------------------------------------------
+
+The code is written in MATLAB:
+    1) The folder "code" contains the functions to perform sparse signal recovery using different approaches: \|x\|_1 minimization, \|\vx\|_p^p  minimization, generalized shannon entropy function minimization, and generalized renyi entropy function minimization.
+    2) The folder "sara_weight" contains the funtions to perform image recovery from linear measurements
+    3) "noiseless_signal_recovery.m" contains examples to perform noiseless recovery.
+    4) "noisy_signal_recovery.m" contains examples to perform noisy recovery.
+    5) "image_recovery.m" contains examples to perform image recovery via sparsity averaging.
