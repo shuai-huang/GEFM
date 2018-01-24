@@ -6,6 +6,7 @@ Homepage: https://sites.google.com/site/shuangsite/
 Last change: 03/30/2017
 Change log: 
     v1.0 (SH) - First release (03/30/2017)
+    v1.1 (SH) - Second release (01/24/2018)
     
 
 ----------------------------------------------------------------
@@ -31,3 +32,4 @@ The code is written in MATLAB:
     3) "noiseless_signal_recovery.m" contains examples to perform noiseless recovery.
     4) "noisy_signal_recovery.m" contains examples to perform noisy recovery.
     5) "image_recovery.m" contains examples to perform image recovery via sparsity averaging.
+    6) "face_recognition.m" contains examples to use SRC to perform face recognition.
