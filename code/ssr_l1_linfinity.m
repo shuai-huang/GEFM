@@ -1,4 +1,4 @@
-function Xt = ssr_lp( Y, A, par, lambda)
+function Xt = ssr_l1_linfinity( Y, A, par, lambda)
 
 	% Sparse signal recovery via \|x\|_p^p minimization (0<p<1) based on FISTA
 	%
@@ -12,19 +12,14 @@ function Xt = ssr_lp( Y, A, par, lambda)
 	% lambda        : the regularization parameter lambda
 	
 
-	par.fun = 'lp';
+	par.fun = 'l1_linfinity';
 	fun_sg = str2func( [par.fun '_sg'] );
 	fun_compute = str2func( ['compute_' par.fun] );
 
 	kappa            = par.kappa;             % Lipschitz constant
 	tol              = par.tol;             % The convergence tolerance
 	maxiter       	 = par.maxiter;         % Maximum number of iterations in the main loop
-	innermaxiter     = par.innermaxiter;    % Maximum number of iterations in the inner loop
-	                                        % It can be set to a small number, 1 usually suffices
-	p            	 = par.p;               % The parameter p, it needs to be tuned
-	                                        % Usually a number around 0.5 gives best performance
 	Xt               = par.X0;              % Initialize X
-	epsilon          = par.epsilon;         % A small positive number, usually set 1e-12
 
 	k_t = 1;
 	k_tm1 = 0;
@@ -44,17 +39,17 @@ function Xt = ssr_lp( Y, A, par, lambda)
 		% Compute acceleration update
 		Ut = Xt + k_tm1/k_t*(Zt-Xt) + (k_tm1-1)/k_t*(Xt-Xtm1);
 		Gt_U = Ut - (1/kappa)*2*(G*Ut-C);
-		w_u = fun_sg(Ut, p, epsilon);
+		w_u = fun_sg(Ut);
 		Ztp1 = weighted_shrinkage(Gt_U, lambda/kappa, w_u);
 		
 		% compute non-acceleration update
 		Gt_X = Xt - (1/kappa)*2*(G*Xt-C);
-		w_x = fun_sg(Xt, p, epsilon);
+		w_x = fun_sg(Xt);
 		Vtp1 = weighted_shrinkage(Gt_X, lambda/kappa, w_x);
 		
 		% compare objective function
-		f_Ztp1 = norm(Y-A*Ztp1)^2 + lambda*fun_compute(Ztp1, p);
-		f_Vtp1 = norm(Y-A*Vtp1)^2 + lambda*fun_compute(Vtp1, p);
+		f_Ztp1 = norm(Y-A*Ztp1)^2 + lambda*fun_compute(Ztp1);
+		f_Vtp1 = norm(Y-A*Vtp1)^2 + lambda*fun_compute(Vtp1);
 		
 		if (f_Ztp1<=f_Vtp1)
 		    Xtp1 = Ztp1;
@@ -90,18 +85,72 @@ function X = weighted_shrinkage(Z, lambda, w)
 	X = max(abs(Z)-lambda*w, 0) .* sign(Z);
 end
 
-% Compute the objective \|x\|_p^p
-function y = compute_lp(X, p)
+
+% Compute the objective l_1/l_infinity
+function y = compute_l1_linfinity(X)
 
 	x_abs = abs(X);
-	y=sum(x_abs.^p);
+	
+	x_abs_max = max(x_abs);
+	
+	y=sum(x_abs)/length(x_abs)/x_abs_max - 1;
 
 end
 
-% Compute the weights, i.e. first order derivative w.r.t. |x_i|
-function y = lp_sg(x,p,epsilon)
-	% supergradient of lp penalty
+% Compute the weights the first order derivative 
+function w = l1_linfinity_sg(x)
+	% supergradient of l_1/l_infinity
+	
+    w = [];
+    
+    % computeWeightes
+    x_abs = abs(x);
+    x_abs_max = max(x_abs);
+    
+    x_seq_max = zeros(size(x));
+    x_seq_max(x_abs==x_abs_max)=1;
+    
+    w = (x_abs_max-sum(x_abs)*x_seq_max)/length(x_abs)/(x_abs_max*x_abs_max);
+    w = w .* sign(x);
 
-	x = abs(x) ;
-	y = p*(x+epsilon).^(p-1) ; % 
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

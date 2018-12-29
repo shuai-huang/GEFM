@@ -1,4 +1,4 @@
-function S_out=recovery_sara_fista(Y, A, At, lambda, Psi, Psit, par)
+function S_out=recovery_sara_l1_fista(Y, A, At, lambda, Psi, Psit, par)
 
     % Image recovery from linear measurements via sparsity averaging: 
     %
@@ -46,9 +46,6 @@ function S_out=recovery_sara_fista(Y, A, At, lambda, Psi, Psit, par)
     k_tm1 = 1;
     
     Stm1 = St;
-    Stp1 = [];
-    
-    Zt = St;
 
     fun_val_cur=0;
     fun_compute = str2func( ['compute_' reg_fun] );
@@ -57,9 +54,7 @@ function S_out=recovery_sara_fista(Y, A, At, lambda, Psi, Psit, par)
 
     for i=1:maxiter
         % store the old value of the iterate and the t-constant
-        
-        % compute acceleration update
-        Rt = St + k_tm1/k_t*(Zt-St) + (k_tm1-1)/k_t*(St-Stm1);
+        Rt = St + ((k_tm1-1)/k_t)*(St-Stm1);
         
         if (strcmp(reg_fun, 'renyi_ef'))
             W = compute_derivative_renyi_ef(Rt, Psi, reg_fun, pval, alpha, epsilon);
@@ -87,55 +82,8 @@ function S_out=recovery_sara_fista(Y, A, At, lambda, Psi, Psit, par)
                 break;
             end
         end
-        Ztp1 = U;
+        Stp1 = U;
         
-        % compute non-acceleration update
-        if (strcmp(reg_fun, 'renyi_ef'))
-            W = compute_derivative_renyi_ef(St, Psi, reg_fun, pval, alpha, epsilon);
-        else
-            W = compute_derivative(St, Psi, reg_fun, pval, epsilon);
-        end
-
-        % gradient step
-        F=St-1/kappa*2*At(A(St)-Y);
-        
-        %invoking the denoising procedure via alternating split bregman shrinkage algorithm
-        B = zeros(size(W));
-        U = F;
-        for (j=1:denoiseiter)
-            X = Psi(U);
-            D = B + X;
-            D=max(abs(D)-gamma*lambda*W, 0).*sign(D);
-            
-            B = B + X -D;
-            
-            U_pre=U;
-            U=1/(gamma+1)*(gamma*F+Psit(D-B));
-            
-            if (norm(U_pre-U)/norm(U)<=denoisetol)
-                break;
-            end
-        end
-        Vtp1 = U;        
-        
-        % compare objective function
-        f_Ztp1=[];
-        f_Vtp1=[];
-        if (strcmp(reg_fun, 'renyi_ef'))
-            f_Ztp1 = norm(Y-A(Ztp1))^2 + lambda*fun_compute(Ztp1, Psi, pval, alpha);
-            f_Vtp1 = norm(Y-A(Vtp1))^2 + lambda*fun_compute(Vtp1, Psi, pval, alpha);
-        else
-            f_Ztp1 = norm(Y-A(Ztp1))^2 + lambda*fun_compute(Ztp1, Psi, pval);
-            f_Vtp1 = norm(Y-A(Vtp1))^2 + lambda*fun_compute(Vtp1, Psi, pval);
-        end
-        
-		if (f_Ztp1<=f_Vtp1)
-		    Stp1 = Ztp1;
-		else
-		    Stp1 = Vtp1;
-		end
-
-        % compute convergence criterion
         if (cri_type == 1)
             con_val = norm(Stp1 - St, 'fro') / norm(Stp1, 'fro');
             fprintf('%3d   %5.5f\n', i, con_val)
@@ -164,8 +112,6 @@ function S_out=recovery_sara_fista(Y, A, At, lambda, Psi, Psit, par)
 	    
 	    Stm1 = St ;
 	    St = Stp1 ;
-	    
-	    Zt = Ztp1;
 
     end
 

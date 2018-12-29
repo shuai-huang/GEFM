@@ -1,7 +1,6 @@
 % add the path, change this if needed
 addpath(genpath('./code'))
 
-
 % problem parameters
 N = 1000;           % column number of the sensing matrix
 M = 250;            % row number of the sensing matrix
@@ -48,7 +47,7 @@ Par.kappa = 2*max(diag(S_diag));    % the Lipschitz constant
 
 
 % start sparse signal recovery
-rec_snr = zeros(1,4);
+rec_snr = zeros(1,9);
 
 % L1 minimization
 Par.X0 = zeros(N, 1);           % initialization
@@ -88,6 +87,92 @@ Xr_renyi_ef = ssr_renyi_ef(Y, A, Par, lambda);
 rec_snr(4) = snr(X, X-Xr_renyi_ef);
 
 
+% l_1 / L_infinity function minimization
+% initialize with Xr_l1
+Par.X0 = Xr_l1;
+lambda=1e-6*N;
+
+Xr_l1_linfinity = ssr_l1_linfinity(Y, A, Par, lambda);
+rec_snr(5) = snr(X,X-Xr_l1_linfinity);
+
+
+% Log-NRG via regularized FOCUSS algorithm
+% initialize with Xr_l1
+Par.X0 = Xr_l1;
+Par.maxiter = 1000;
+lambda=0.025;
+Xr_log_nrg = focuss(Y, A, -1, false, Xr_l1, Par.maxiter, 0, lambda);
+rec_snr(6) = snr(X,X-Xr_log_nrg);
+
+% Iterative Hard-thresholding
+% make sure the operator norm of A is normalized so that ||A||_2<=1
+A_normalized = A/sqrt(max(diag(S_diag)));
+Y_normalized = Y/sqrt(max(diag(S_diag)));
+
+Par.X0 = Xr_l1;     % initialization
+Par.tol = 1e-6;     % convergence tolerance
+
+lambda = 0.2;
+
+Xr_iht = ssr_iht(Y_normalized, A_normalized, Par, lambda);
+rec_snr(7) = snr(X,X-Xr_iht);
+
+% orthogonal matching pursuit
+% initialize with Xr_l1
+cutoff_thd=0.5;
+sparsity_ratio=0.1;    % sparsity upperbound ratio
+
+Xr_l1_init = Xr_l1;
+Xr_l1_init(abs(Xr_l1_init)<cutoff_thd)=0;
+sparsity0 = length(Xr_l1_init(Xr_l1_init~=0));
+
+sparsity = round(sparsity_ratio*N); % sparsity upperbound
+
+% just to make sure the initialization is sparse, and less than the sparsity upperbound
+if (sparsity0>0.8*sparsity)
+    Xr_l1_sort = sort(abs(Xr_l1), 'descend');
+    Xr_l1_cutoff_thd = Xr_l1_sort(round(0.8*sparsity));
+
+    Xr_l1_init = Xr_l1;
+    Xr_l1_init(abs(Xr_l1_init)<Xr_l1_cutoff_thd)=0;
+    sparsity0 = length(Xr_l1_init(Xr_l1_init~=0));
+end 
+
+omp_opts.X0 = Xr_l1_init;
+omp_opts.maxiter = Par.maxiter;
+Xr_omp = OMP_init(A, Y, sparsity, omp_opts);
+rec_snr(8) = snr(X,X-Xr_omp);
+
+% CoSaMP
+% initialize with Xr_l1
+cutoff_thd=0.5;
+sparsity_ratio=0.06;    % sparsity upperbound ratio
+
+Xr_l1_init = Xr_l1;
+Xr_l1_init(abs(Xr_l1_init)<cutoff_thd)=0;
+sparsity0 = length(Xr_l1_init(Xr_l1_init~=0));
+
+sparsity = round(sparsity_ratio*N); % sparsity upperbound
+
+% just to make sure the initialization is sparse, and less than the sparsity upperbound
+if (sparsity0>0.8*sparsity)
+    Xr_l1_sort = sort(abs(Xr_l1), 'descend');
+    Xr_l1_cutoff_thd = Xr_l1_sort(round(0.8*sparsity));
+
+    Xr_l1_init = Xr_l1;
+    Xr_l1_init(abs(Xr_l1_init)<Xr_l1_cutoff_thd)=0;
+    sparsity0 = length(Xr_l1_init(Xr_l1_init~=0));
+end 
+
+cosamp_opts.X0 = Xr_l1_init;
+cosamp_opts.maxiter = Par.maxiter;
+cosamp_opts.normTol = Par.tol;
+cosamp_opts.support_tol = Par.tol;
+
+Xr_cosamp = CoSaMP_init_fast(A, Y, sparsity, cosamp_opts);
+rec_snr(9) = snr(X,X-Xr_cosamp);
+
+
 rec_snr_mat=[rec_snr_mat; rec_snr];
 end
 
@@ -98,4 +183,9 @@ fprintf('L1  : %.2f dB\n', mean(rec_snr_mat(:,1)))
 fprintf('Lp  : %.2f dB\n', mean(rec_snr_mat(:,2)))
 fprintf('SEF : %.2f dB\n', mean(rec_snr_mat(:,3)))
 fprintf('REF : %.2f dB\n', mean(rec_snr_mat(:,4)))
+fprintf('L_1-L_infinity : %.2f dB\n', mean(rec_snr_mat(:,5)))
+fprintf('Log-NRG : %.2f dB\n', mean(rec_snr_mat(:,6)))
+fprintf('IHT : %.2f dB\n', mean(rec_snr_mat(:,7)))
+fprintf('OMP : %.2f dB\n', mean(rec_snr_mat(:,8)))
+fprintf('CoSaMP : %.2f dB\n', mean(rec_snr_mat(:,9)))
 

@@ -1,4 +1,4 @@
-function S_out=recovery_sara_fista(Y, A, At, lambda, Psi, Psit, par)
+function S_out=recovery_sara_l1_linfinity_fista(Y, A, At, lambda, Psi, Psit, par)
 
     % Image recovery from linear measurements via sparsity averaging: 
     %

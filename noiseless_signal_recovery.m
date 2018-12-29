@@ -47,7 +47,7 @@ Par.kappa = 2*max(diag(S_diag));    % the Lipschitz constant
 
 
 % start sparse signal recovery
-relError = zeros(1,4);            % the relative error
+relError = zeros(1,9);            % the relative error
 
 % constant, i.e. L1 minimization
 Par.p = 1;                        % l1 norm 
@@ -56,7 +56,7 @@ for (lambda_idx=1:200)
     lambda=lambda0*0.9^(lambda_idx-1);
     Xr = ssr_l1(Y, A, Par, lambda);
 
-    if (norm(Xr-Par.X0, 'fro')/norm(Xr, 'fro') < Par.tol) && (lambda<lambda_min)
+    if (norm(Xr-Par.X0)/norm(Xr) < Par.tol) && (lambda<lambda_min)
         break;
     end 
     Par.X0 = Xr; 
@@ -64,9 +64,7 @@ end
 
 % for best performance, use the solution from L1 minimization to initialize
 Xr_l1 = Xr;
-relError(1) = norm(X - Xr_l1, 'fro')/norm(X, 'fro');
-
-
+relError(1) = norm(X - Xr_l1)/norm(X);
 
 
 % Lp minimization
@@ -77,14 +75,14 @@ for (lambda_idx=1:200)
     lambda=lambda0*0.9^(lambda_idx-1);
     Xr = ssr_lp(Y, A, Par, lambda);
 
-    if (norm(Xr-Par.X0, 'fro')/norm(Xr, 'fro') < Par.tol) && (lambda<lambda_min)
+    if (norm(Xr-Par.X0)/norm(Xr) < Par.tol) && (lambda<lambda_min)
         break;
     end 
     Par.X0 = Xr; 
 end
 
 Xr_lp = Xr;
-relError(2) = norm(X - Xr_lp, 'fro')/norm(X, 'fro');
+relError(2) = norm(X - Xr_lp)/norm(X);
 
 % Shannon entropy function minimization
 % initialize with Xr_l1
@@ -94,14 +92,14 @@ for (lambda_idx=1:200)
     lambda=lambda0*0.9^(lambda_idx-1);
     Xr = ssr_shannon_ef(Y, A, Par, lambda);
 
-    if (norm(Xr-Par.X0, 'fro')/norm(Xr, 'fro') < Par.tol) && (lambda<lambda_min)
+    if (norm(Xr-Par.X0)/norm(Xr) < Par.tol) && (lambda<lambda_min)
         break;
     end 
     Par.X0 = Xr; 
 end
 
 Xr_shannon_ef = Xr;
-relError(3) = norm(X - Xr_shannon_ef, 'fro')/norm(X, 'fro');
+relError(3) = norm(X - Xr_shannon_ef)/norm(X);
 
 
 % Renyi entropy function minimization
@@ -114,14 +112,112 @@ for (lambda_idx=1:200)
     lambda=lambda0*0.9^(lambda_idx-1);
     Xr = ssr_renyi_ef(Y, A, Par, lambda);
 
-    if (norm(Xr-Par.X0, 'fro')/norm(Xr, 'fro') < Par.tol) && (lambda<lambda_min)
+    if (norm(Xr-Par.X0)/norm(Xr) < Par.tol) && (lambda<lambda_min)
         break;
     end 
     Par.X0 = Xr; 
 end
 
 Xr_renyi_ef = Xr;
-relError(4) = norm(X - Xr_renyi_ef, 'fro')/norm(X, 'fro');
+relError(4) = norm(X - Xr_renyi_ef)/norm(X);
+
+
+% l_1 / L_infinity function minimization
+% initialize with Xr_l1
+Par.X0 = Xr_l1;
+lambda0_l1_linfinity = lambda0*1e-6*N;
+
+for (lambda_idx=1:200)
+    lambda=lambda0_l1_linfinity*0.9^(lambda_idx-1);
+    Xr = ssr_l1_linfinity(Y, A, Par, lambda);
+
+    if (norm(Xr-Par.X0)/norm(Xr) < Par.tol) && (lambda<lambda_min)
+        break;
+    end 
+    Par.X0 = Xr; 
+end
+
+Xr_l1_linfinity = Xr;
+relError(5) = norm(X - Xr_l1_linfinity)/norm(X);
+
+
+% logarithm of energy minimization using regularized FOCUSS algorithm
+% initialize with Xr_l1
+Par.X0 = Xr_l1;
+Xr_log_nrg = focuss(Y, A, -1, false, Par.X0, Par.maxiter, 0, 0);
+relError(6) = norm(X - Xr_log_nrg)/norm(X);
+
+
+% iterative hard thresholding
+% make sure the operator norm of A is normalized so that ||A||_2<=1
+A_normalized = A/sqrt(max(diag(S_diag)));
+Y_normalized = Y/sqrt(max(diag(S_diag)));
+
+Par.X0 = Xr_l1;
+
+for (lambda_idx=1:200)
+    lambda=lambda0*0.9^(lambda_idx-1);
+    Xr = ssr_iht(Y_normalized, A_normalized, Par, lambda);
+
+    if (norm(Xr-Par.X0)/norm(Xr) < Par.tol) && (lambda<lambda_min)
+        break;
+    end
+    Par.X0 = Xr;
+end
+
+Xr_iht = Xr;
+relError(7) = norm(X - Xr_iht)/norm(X);
+
+
+% orthogonal matching pursuit
+% initialize with Xr_l1
+Xr_l1_cutoff_thd = lambda0;
+Xr_l1_init = Xr_l1;
+Xr_l1_init(abs(Xr_l1_init)<Xr_l1_cutoff_thd)=0;
+
+omp_opts.X0 = Xr_l1_init;
+omp_opts.maxiter = Par.maxiter;
+
+sparsity = length(Y);   % set an upper bound for sparsity
+Xr = OMP_init(A, Y, sparsity, omp_opts);
+
+Xr_omp = Xr;
+relError(8) = norm(X - Xr_omp)/norm(X);
+
+
+% CoSaMP
+% initialize with Xr_constant
+Xr_l1_cutoff_thd = lambda0;
+
+Xr_l1_init = Xr_l1;
+Xr_l1_init(abs(Xr_l1_init)<Xr_l1_cutoff_thd)=0;
+sparsity0 = length(Xr_l1_init(Xr_l1_init~=0));  % sparsity of the initialization
+
+cosamp_opts.X0 = Xr_l1_init;
+cosamp_opts.maxiter = 200;
+cosamp_opts.normTol = Par.tol;
+cosamp_opts.support_tol = Par.tol;
+
+% record the residue and select the smallest one among them
+residue_seq=[];
+Xr_mat=[];
+for (sparsity_idx=1:N)
+    sparsity = sparsity0 + sparsity_idx;
+
+    if (sparsity>=S+5)  % a liitle trick to avoid running indefinitely, no need to venture further than the oracle sparsity...
+        break;
+    end
+
+    Xr = CoSaMP_init_fast(A, Y, sparsity, cosamp_opts);
+    Xr_mat = [Xr_mat Xr];
+    residue_seq = [residue_seq norm(Y-A*Xr)];
+end
+
+[residue_min, residue_min_idx]=min(residue_seq);
+Xr = Xr_mat(:, residue_min_idx);
+
+Xr_cosamp = Xr;
+relError(9) = norm(X - Xr_cosamp)/norm(X);
 
 
 relError_mat=[relError_mat; relError];
@@ -135,7 +231,11 @@ fprintf('L1\t:\t %d/10\n', sum(relError_mat(:, 1)<1e-3))
 fprintf('Lp\t:\t %d/10\n', sum(relError_mat(:, 2)<1e-3))
 fprintf('SEF\t:\t %d/10\n', sum(relError_mat(:, 3)<1e-3))
 fprintf('REF\t:\t %d/10\n', sum(relError_mat(:, 4)<1e-3))
-
+fprintf('L_1-L_infinity\t:\t %d/10\n', sum(relError_mat(:, 5)<1e-3))
+fprintf('log-NRG\t:\t %d/10\n', sum(relError_mat(:, 6)<1e-3))
+fprintf('IHT\t:\t %d/10\n', sum(relError_mat(:, 7)<1e-3))
+fprintf('OMP\t:\t %d/10\n', sum(relError_mat(:, 8)<1e-3))
+fprintf('CoSaMP\t:\t %d/10\n', sum(relError_mat(:, 9)<1e-3))
 
 
 

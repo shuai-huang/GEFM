@@ -1,4 +1,4 @@
-function Xk = srr_shannon_ef_sep( Y, A1, A2, par, lambda, mu)
+function Xt = srr_shannon_ef_sep( Y, A1, A2, par, lambda, mu)
 
 	% Sparse signal recovery via generalized Shannon entropy function minimization based on FISTA
 	%
@@ -24,14 +24,17 @@ function Xk = srr_shannon_ef_sep( Y, A1, A2, par, lambda, mu)
 	                                        % It can be set to a small number, 1 usually suffices
 	p            	 = par.p;               % The parameter p, it needs to be tuned
 	                                        % Usually a number around 1 gives best performance
-	Xk               = par.X0;              % Initialize X
+	Xt               = par.X0;              % Initialize X
 	epsilon          = par.epsilon;         % A small positive number, usually set 1e-12
 
 
-	t_k = 1;
-	t_km1 = 1;
+	k_t = 1;
+	k_tm1 = 0;
 
-	Xkm1 = Xk;
+	Xtm1 = Xt;
+	Xtp1 = [];
+	
+	Zt = Xt;
 
     col_A1 = size(A1,2);
     col_A2 = size(A2,2); 
@@ -39,50 +42,60 @@ function Xk = srr_shannon_ef_sep( Y, A1, A2, par, lambda, mu)
     G = [A1 A2]'*[A1 A2];
     C = [A1 A2]'*Y;   
 
+
 	for iter = 1 : maxiter
 	
 		%fprintf('   Inner iteration %d\n', iter);
-		Yk = Xk + ((t_km1-1)/t_k)*(Xk-Xkm1);
-		Gk = Yk - (1/kappa)*2*(G*Yk-C);
+		
+		% Compute acceleration update
+		Ut = Xt + k_tm1/k_t*(Zt-Xt) + (k_tm1-1)/k_t*(Xt-Xtm1);
+		Gt_U = Ut - (1/kappa)*2*(G*Ut-C);
+				
+		w_u_1 = fun_sg(Ut(1:col_A1), p, epsilon);
+		Ztp1_1 = weighted_shrinkage(Gt_U(1:col_A1), lambda/kappa, w_u_1);
 
-		Xkp1 = [];
-		Xk_r = Yk;
-        Xkp1_r = Xk_r;
-        fpre = kappa/2*norm(Xkp1_r-Gk, 'fro')^2+lambda*fun_compute(Xkp1_r(1:col_A1), p)+lambda*mu*fun_compute(Xkp1_r(col_A1+1:end), p);
-		for inneriter  = 1:innermaxiter
-			w_1 = fun_sg(Xk_r(1:col_A1), p, epsilon);
-			Xkp1_r_1 = weighted_shrinkage(Gk(1:col_A1), lambda/kappa, w_1);
+        w_u_2 = fun_sg(Ut(col_A1+1:end), p, epsilon);
+        Ztp1_2 = weighted_shrinkage(Gt_U(col_A1+1:end), lambda*mu/kappa, w_u_2);
+        
+		Ztp1 = [Ztp1_1; Ztp1_2];
+		
+		% compute non-acceleration update
+		Gt_X = Xt - (1/kappa)*2*(G*Xt-C);
+		
+		w_x_1 = fun_sg(Xt(1:col_A1), p, epsilon);
+		Vtp1_1 = weighted_shrinkage(Gt_X(1:col_A1), lambda/kappa, w_x_1);
 
-            w_2 = fun_sg(Xk_r(col_A1+1:end), p, epsilon);
-            Xkp1_r_2 = weighted_shrinkage(Gk(col_A1+1:end), lambda*mu/kappa, w_2);
-
-            Xkp1_r = [Xkp1_r_1; Xkp1_r_2];
-
-            fcur =  kappa/2*norm(Xkp1_r-Gk, 'fro')^2+lambda*fun_compute(Xkp1_r(1:col_A1), p)+lambda*mu*fun_compute(Xkp1_r(col_A1+1:end), p);
-            if (fcur>fpre)
-                Xkp1 = Xkp1_r;
-                break;
-            end
-            fpre = fcur;
-
-			if (norm(Xkp1_r - Xk_r, 'fro') / norm(Xkp1_r, 'fro') < tol)
-				Xkp1 = Xkp1_r;
-				break;
-			end
-			
-			Xkp1 = Xkp1_r;
-			Xk_r = Xkp1_r;
+        w_x_2 = fun_sg(Xt(col_A1+1:end), p, epsilon);
+        Vtp1_2 = weighted_shrinkage(Gt_X(col_A1+1:end), lambda*mu/kappa, w_x_2);
+        
+        Vtp1 = [Vtp1_1; Vtp1_2];
+        
+        % compare objective functions
+        f_Ztp1 = norm(Y-[A1 A2]*Ztp1)^2 + lambda*fun_compute(Ztp1_1, p) + lambda*mu*fun_compute(Ztp1_2, p);
+        f_Vtp1 = norm(Y-[A1 A2]*Vtp1)^2 + lambda*fun_compute(Vtp1_1, p) + lambda*mu*fun_compute(Vtp1_2, p);
+        
+		if (f_Ztp1<=f_Vtp1)
+		    Xtp1 = Ztp1;
+		else
+		    Xtp1 = Vtp1;
 		end
-
-		if (norm(Xkp1 - Xk, 'fro') / norm(Xkp1, 'fro') < tol)
+        	
+        % check convergence criterion
+		if (norm(Xtp1 - Xt) / norm(Xtp1) < tol)
 			break;
 		end
+		
+		% update k value
+		k_tp1 = 0.5*(1+sqrt(1+4*k_t*k_t));
 
-		t_kp1 = 0.5*(1+sqrt(1+4*t_k*t_k)) ;
-		t_km1 = t_k ;
-		t_k = t_kp1 ;
-		Xkm1 = Xk ;
-		Xk = Xkp1 ;
+        % update iterations
+		k_tm1 = k_t;
+		k_t = k_tp1;
+		
+		Xtm1 = Xt;
+		Xt = Xtp1;
+		
+		Zt = Ztp1;
 		
 	end
 

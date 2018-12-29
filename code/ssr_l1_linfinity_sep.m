@@ -1,6 +1,6 @@
-function Xt = srr_shannon_ef( Y, A, par, lambda)
+function Xt = ssr_l1_linfinity_sep( Y, A1, A2, par, lambda, mu)
 
-	% Sparse signal recovery via generalized Shannon entropy function minimization based on FISTA
+	% Sparse signal recovery via \|x\|_p^p minimization (0<p<1) based on FISTA
 	%
     % By Shuai Huang, The Johns Hopkins University
     % Email: shuang40@jhu.edu 
@@ -12,8 +12,8 @@ function Xt = srr_shannon_ef( Y, A, par, lambda)
 	% lambda        : the regularization parameter lambda
 	%
 
-	par.fun = 'shannon_ef';
-
+	par.fun = 'l1_linfinity';
+	
 	fun_sg = str2func( [par.fun '_sg'] );
 	fun_compute = str2func( ['compute_' par.fun] );
 
@@ -23,7 +23,7 @@ function Xt = srr_shannon_ef( Y, A, par, lambda)
 	innermaxiter     = par.innermaxiter;    % Maximum number of iterations in the inner loop
 	                                        % It can be set to a small number, 1 usually suffices
 	p            	 = par.p;               % The parameter p, it needs to be tuned
-	                                        % Usually a number around 1 gives best performance
+	                                        % Usually a number around 0.5 gives best performance
 	Xt               = par.X0;              % Initialize X
 	epsilon          = par.epsilon;         % A small positive number, usually set 1e-12
 
@@ -36,8 +36,12 @@ function Xt = srr_shannon_ef( Y, A, par, lambda)
 	
 	Zt = Xt;
 
-	G=A'*A;
-	C=A'*Y;
+    col_A1 = size(A1,2);
+    col_A2 = size(A2,2); 
+    
+    G = [A1 A2]'*[A1 A2];
+    C = [A1 A2]'*Y;   
+
 
 	for iter = 1 : maxiter
 	
@@ -46,28 +50,41 @@ function Xt = srr_shannon_ef( Y, A, par, lambda)
 		% Compute acceleration update
 		Ut = Xt + k_tm1/k_t*(Zt-Xt) + (k_tm1-1)/k_t*(Xt-Xtm1);
 		Gt_U = Ut - (1/kappa)*2*(G*Ut-C);
-		w_u = fun_sg(Ut, p, epsilon);
-		Ztp1 = weighted_shrinkage(Gt_U, lambda/kappa, w_u);
+				
+		w_u_1 = fun_sg(Ut(1:col_A1));
+		Ztp1_1 = weighted_shrinkage(Gt_U(1:col_A1), lambda/kappa, w_u_1);
+
+        w_u_2 = fun_sg(Ut(col_A1+1:end));
+        Ztp1_2 = weighted_shrinkage(Gt_U(col_A1+1:end), lambda*mu/kappa, w_u_2);
+        
+		Ztp1 = [Ztp1_1; Ztp1_2];
 		
 		% compute non-acceleration update
 		Gt_X = Xt - (1/kappa)*2*(G*Xt-C);
-		w_x = fun_sg(Xt, p, epsilon);
-		Vtp1 = weighted_shrinkage(Gt_X, lambda/kappa, w_x);
 		
-		% compare objective function
-		f_Ztp1 = norm(Y-A*Ztp1)^2 + lambda*fun_compute(Ztp1, p);
-		f_Vtp1 = norm(Y-A*Vtp1)^2 + lambda*fun_compute(Vtp1, p);
-		
+		w_x_1 = fun_sg(Xt(1:col_A1));
+		Vtp1_1 = weighted_shrinkage(Gt_X(1:col_A1), lambda/kappa, w_x_1);
+
+        w_x_2 = fun_sg(Xt(col_A1+1:end));
+        Vtp1_2 = weighted_shrinkage(Gt_X(col_A1+1:end), lambda*mu/kappa, w_x_2);
+        
+        Vtp1 = [Vtp1_1; Vtp1_2];
+        
+        % compare objective functions
+        f_Ztp1 = norm(Y-[A1 A2]*Ztp1)^2 + lambda*fun_compute(Ztp1_1) + lambda*mu*fun_compute(Ztp1_2);
+        f_Vtp1 = norm(Y-[A1 A2]*Vtp1)^2 + lambda*fun_compute(Vtp1_1) + lambda*mu*fun_compute(Vtp1_2);
+        
 		if (f_Ztp1<=f_Vtp1)
 		    Xtp1 = Ztp1;
 		else
 		    Xtp1 = Vtp1;
 		end
-
+        	
         % check convergence criterion
 		if (norm(Xtp1 - Xt) / norm(Xtp1) < tol)
 			break;
 		end
+		%fprintf('cri: %d\t %f\n',iter,  norm(Xtp1 - Xt) / norm(Xtp1))
 		
 		% update k value
 		k_tp1 = 0.5*(1+sqrt(1+4*k_t*k_t));
@@ -85,46 +102,39 @@ function Xt = srr_shannon_ef( Y, A, par, lambda)
 
 end
 
+
 % Compute the weighted soft thresholding 
 function X = weighted_shrinkage(Z, lambda, w)
 
 	X = max(abs(Z)-lambda*w, 0) .* sign(Z);
 end
 
-% Compute the objective: generalized Shannon entropy function
-function y = compute_shannon_ef(X, p)
+% Compute the objective l_1/l_infinity
+function y = compute_l1_linfinity(X)
 
 	x_abs = abs(X);
-
-	x_abs_p = x_abs.^p;
 	
-	x_abs_p_sum=sum(x_abs_p);
-	x_abs_p_norm = x_abs_p/x_abs_p_sum;
-	x_abs_p_norm(x_abs_p_norm==0)=1;
-	y=-sum(x_abs_p_norm.*log(x_abs_p_norm));
+	x_abs_max = max(x_abs);
+	
+	y=sum(x_abs)/length(x_abs)/x_abs_max - 1;
 
 end
 
-% Compute the weights, i.e. first order derivative w.r.t. |x_i|
-function w = shannon_ef_sg( x, p, epsilon)
-
-	w = []; 
+% Compute the weights the first order derivative 
+function w = l1_linfinity_sg(x)
+	% supergradient of l_1/l_infinity
 	
-	%computeWeightes
-	x_abs = abs(x);
-	x_abs_p = x_abs.^p;
-	x_abs_p_sum = sum(x_abs_p);
-
-	x_abs_p_ori=x_abs_p;
-	x_abs_p(x_abs_p_ori==0)=1;
-	x_abs_p_log=log(x_abs_p);
-	x_abs_p(x_abs_p_ori==0)=0;
-
-	if ((max(x_abs_p)+epsilon)<x_abs_p_sum)
-		w = -log(x_abs_p+epsilon)/x_abs_p_sum + sum(x_abs_p.*x_abs_p_log)/(x_abs_p_sum^2);
-		w = p*(x_abs.^(p-1)).*w;
-	else
-		w = repmat(1, size(x,1), size(x,2));
-	end
+    w = [];
+    
+    % computeWeightes
+    x_abs = abs(x);
+    x_abs_max = max(x_abs);
+    
+    x_seq_max = zeros(size(x));
+    x_seq_max(x_abs==x_abs_max)=1;
+    
+    w = (x_abs_max-sum(x_abs)*x_seq_max)/length(x_abs)/(x_abs_max*x_abs_max);
+    w = w .* sign(x);
 
 end
+
