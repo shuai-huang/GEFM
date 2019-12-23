@@ -8,7 +8,7 @@ Change log:
     v1.0 (SH) - (03/30/2017)
     v1.1 (SH) - (01/24/2018)
     v2.0 (SH) - (12/29/2018)
-    v2.1 (SH) - (12/23/2019) update the image recovery algorithm with much faster implementation that does not rely on alternating the split bregman shrinkage algorithm
+    v2.1 (SH) - (12/23/2019) update the image recovery algorithm with faster implementation that does not rely on alternating the split bregman shrinkage algorithm
 ```  
 
 
