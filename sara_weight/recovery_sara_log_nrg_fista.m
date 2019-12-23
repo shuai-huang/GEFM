@@ -36,11 +36,6 @@ function S_out=recovery_sara_log_nrg_fista(Y, A, At, lambda, Psi, Psit, par)
     cri_type = par.cri_type;        % criterion type: 0 - relative changes in the image between consecutive iterations
                                     %                 1 - relateive changes in the objective function value between consecutive iterations
 
-    % Assign parameters for the denoising procedure 
-    denoiseiter   = par.denoiseiter;  % max iterations of Alternating split bregman shrinkage (ASBS) algorithm
-    denoisetol    = par.denoisetol;   % convergence criterion, can be set 1e-6
-    gamma         = par.gamma;        % the gamma parameter in ASBS algorithm              
-
 
     k_t = 1;
     k_tm1 = 1;
@@ -65,26 +60,9 @@ function S_out=recovery_sara_log_nrg_fista(Y, A, At, lambda, Psi, Psit, par)
         % gradient step
         F=Rt-1/kappa*2*At(A(Rt)-Y);
 
-        %invoking the denoising procedure via alternating split bregman shrinkage algorithm
-        B = zeros(size(W));
-        U = F;
-        
-        W_inv = 1./W;
-        
-        for (j=1:denoiseiter)
-            X = Psi(U);
-            D = B + X;
-            D = W_inv.*(D./(W_inv+lambda));
-            
-            B = B + X -D;
-            
-            U_pre=U;
-            U=1/(gamma+1)*(gamma*F+Psit(D-B));
-            
-            if (norm(U_pre-U)/norm(U)<=denoisetol)
-                break;
-            end
-        end
+        D = Psi(F);
+        D = max(abs(D)-lambda/kappa*W, 0).*sign(D);
+        U = Psit(D);
         Stp1 = U;
         
         if (cri_type == 1)

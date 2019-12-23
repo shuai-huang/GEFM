@@ -1,3 +1,8 @@
+%    v1.0 (SH) - First release (03/30/2017)
+%    v1.1 (SH) - Second release (01/24/2018)
+%    v2.0 (SH) - Third release (12/29/2018)
+%    v2.1 (SH) - (12/23/2019) update the image recovery algorithm with much faster implementation that does not rely on alternating the split bregman shrinkage algorithm
+
 addpath(genpath('./sara_weight'));
 
 rate = 0.2;             % sampling rate
@@ -88,6 +93,7 @@ At = @(x) CC.*(idct2(reshape(Ma'*x(:), imSize)*sqrt(numel(ind))));
 
 
 % noisy measurements y
+% note that for different noise levels, the regularization parameters need to be tuned accordingly for best performance
 y=A(img);
 noise = randn(size(y));
 y=y+0.02*noise;
@@ -95,18 +101,15 @@ y=y+0.02*noise;
 psnr_rec = zeros(1,7);
 % L1 minimization
 par.reg_fun='l1';
-par.X0 = zeros(imSize);    % initialize the estimated image with all zeros
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 1;	
-par.epsilon = 1e-12;
-par.tol = 1e-6;            % adjust this accordingly
-par.denoisetol = 1e-6;       % adjust this accordingly
-par.kappa = 2;             % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
-par.gamma=1;               % gamma for the ASBS algorithm
-par.cri_type=1;
+par.X0 = zeros(imSize);     % initialize the estimated image with all zeros
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 1;               % dummy parameter, does not play any role for l1 recovery here 
+par.epsilon = eps;          % avoid division by 0
+par.tol = 1e-6;             % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
 
-lambda = 0.1;              % the optimal lambda value needs to be tuned accordingly
+lambda = 0.1;               % the optimal lambda value needs to be tuned accordingly
 xr_l1 = recovery_sara_l1_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(1) = psnr(img, xr_l1);
 
@@ -114,17 +117,15 @@ psnr_rec(1) = psnr(img, xr_l1);
 % Lp minimization
 par.reg_fun='lp';
 % for best performance, use the solution from L1 minimization to initialize
-par.X0=xr_l1;
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 0.8;	    % the optimal p value needs to be tuned accordingly
-par.epsilon = 1e-12;
-par.tol = 1e-6;            % adjust this accordingly
-par.denoisetol = 1e-6;       % adjust this accordingly
-par.kappa = 2;             % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
-par.gamma=1;               % gamma for the ASBS algorithm
-par.cri_type=1;
-lambda = 0.01;      % the optimal lambda value needs to be tuned accordingly
+par.X0=xr_l1;               % initialize with l1 recovery
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 0.5;             % the optimal p value needs to be tuned accordingly
+par.epsilon = eps;          % avoid division by 0
+par.tol = 1e-6;             % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
+
+lambda = 10;              % the optimal lambda value needs to be tuned accordingly
 xr_lp = recovery_sara_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(2) = psnr(img, xr_lp);
 
@@ -132,17 +133,15 @@ psnr_rec(2) = psnr(img, xr_lp);
 % Shannon entropy function minimization
 par.reg_fun='shannon_ef';
 % for best performance, use the solution from L1 minimization to initialize
-par.X0=xr_l1;
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 1;	    % the optimal p value needs to be tuned accordingly
-par.epsilon = 1e-12;
-par.tol = 1e-6;            % adjust this accordingly
-par.denoisetol = 1e-6;       % adjust this accordingly
-par.kappa = 2;             % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
-par.gamma=1;               % gamma for the ASBS algorithm
-par.cri_type=1;
-lambda = 5000;      % the optimal lambda value needs to be tuned accordingly
+par.X0=xr_l1;               % initialize with l1 recovery
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 0.8;               % the optimal p value needs to be tuned accordingly
+par.epsilon = eps;          % avoid division by 0
+par.tol = 1e-6;             % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
+
+lambda = 1000000;              % the optimal lambda value needs to be tuned accordingly
 xr_shannon_ef = recovery_sara_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(3) = psnr(img, xr_shannon_ef);
 
@@ -150,18 +149,16 @@ psnr_rec(3) = psnr(img, xr_shannon_ef);
 % Renyi entropy function minimization
 par.reg_fun='renyi_ef';
 % for best performance, use the solution from L1 minimization to initialize
-par.X0=xr_l1;
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 0.9;	    % the optimal p value needs to be tuned accordingly
-par.alpha = 1.1;    % the optimal alpha value needs to be tuned accordingly
-par.epsilon = 1e-12;
-par.tol = 1e-6;            % adjust this accordingly
-par.denoisetol = 1e-6;       % adjust this accordingly
-par.kappa = 2;             % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
-par.gamma=1;               % gamma for the ASBS algorithm
-par.cri_type=1;
-lambda=10000;       % the optimal lambda value needs to be tuned accordingly
+par.X0=xr_l1;               % initialize with l1 recovery
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 0.9;             % the optimal p value needs to be tuned accordingly
+par.alpha = 0.8;            % the optimal alpha value needs to be tuned accordingly
+par.epsilon = eps;          % avoid division by 0
+par.tol = 1e-6;             % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
+
+lambda=1000000;               % the optimal lambda value needs to be tuned accordingly
 xr_renyi_ef = recovery_sara_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(4) = psnr(img, xr_renyi_ef);
 
@@ -169,17 +166,15 @@ psnr_rec(4) = psnr(img, xr_renyi_ef);
 % L_1-L_infinity function minimization
 par.reg_fun='l1_linfinity';
 % for best performance, use the solution from L1 minimization to initialize
-par.X0=xr_l1;
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 1;	    % the optimal p value needs to be tuned accordingly
-par.epsilon = 1e-12;
-par.tol = 1e-6;            % adjust this accordingly
-par.denoisetol = 1e-6;       % adjust this accordingly
-par.kappa = 2;             % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
-par.gamma=1;               % gamma for the ASBS algorithm
-par.cri_type=1;
-lambda=0.1*(ncoef1+ncoef2+ncoef3+ncoef4);       % the optimal lambda value needs to be tuned accordingly
+par.X0=xr_l1;               % initialize with l1 recovery
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 1;               % dummy variable to be removed in a later version
+par.epsilon = eps;          % avoid division by 0
+par.tol = 1e-6;             % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
+
+lambda=1;       % the optimal lambda value needs to be tuned accordingly
 xr_l1_linfinity = recovery_sara_l1_linfinity_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(5) = psnr(img, xr_l1_linfinity);
 
@@ -187,36 +182,32 @@ psnr_rec(5) = psnr(img, xr_l1_linfinity);
 
 % logarithm of energy minimization via regularized FOCUSS algorithm
 par.reg_fun='log_nrg';
-par.X0=xr_l1;
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 1;	    % dummy variable to be removed in a later version
-par.epsilon = 1e-12;
-par.tol=1e-6;
-par.denoisetol = 1e-6;
-par.kappa = 2;
-par.gamma=1;
-par.cri_type=1;
+% for best performance, use the solution from L1 minimization to initialize
+par.X0=xr_l1;               % initialize with l1 recovery
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 1;               % dummy variable to be removed in a later version
+par.epsilon = eps;          % avoid division by 0
+par.tol=1e-6;               % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
 
-lambda=0.5; % the optimal lambda value needs to be tuned accordingly
+lambda=50;                 % the optimal lambda value needs to be tuned accordingly
 xr_log_nrg = recovery_sara_log_nrg_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(6) = psnr(img, xr_log_nrg);
 
 % iterative hard-thresholding
 % The de facto operator norm of A is bounded above by 1, convergence of IHT is thus guaranteed
 par.reg_fun='iht';
-par.X0=xr_l1;
-par.maxiter = 1000;
-par.denoiseiter = 1000;
-par.pval = 1;	    % dummy variable to be removed in a later version
-par.epsilon = 1e-12;
-par.tol=1e-6;
-par.denoisetol = 1e-6;
-par.kappa = 2;
-par.gamma=1;
-par.cri_type=1;
+% for best performance, use the solution from L1 minimization to initialize
+par.X0=xr_l1;               % initialize with l1 recovery
+par.maxiter = 1000;         % maximum number of iterations
+par.pval = 1;               % dummy variable to be removed in a later version
+par.epsilon = eps;          % avoid division by 0
+par.tol=1e-6;               % convergence tolerance, adjust this accordingly
+par.kappa = 2;              % should be twice the largest eigenvalue of (Psi*At*A*Psit), i.e. 2 in this case.
+par.cri_type=1;             % choose convergence criterion
 
-lambda=5; % the optimal lambda value needs to be tuned accordingly
+lambda=1e-3;                   % the optimal lambda value needs to be tuned accordingly
 xr_iht = recovery_sara_iht_fista(y, A, At, lambda, Psi, Psit, par);
 psnr_rec(7) = psnr(img, xr_iht);
 
